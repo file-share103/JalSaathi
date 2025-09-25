@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimal Form</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    form { display: grid; gap: 8px; max-width: 360px; }
+    label { display: grid; gap: 4px; font-size: 14px; }
+    input, button { padding: 8px; font-size: 14px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .hint { color: #666; font-size: 12px; }
+    .ok { color: #0a0; }
+    .err { color: #a00; }
+    .small { font-size: 12px; }
+  </style>
+  <script>
+    // Utilities
+    function $(id){ return document.getElementById(id); }
+    function readEntries(){ try { return JSON.parse(localStorage.getItem('entries')||'[]'); } catch { return []; } }
+    function writeEntries(list){ localStorage.setItem('entries', JSON.stringify(list)); }
+
+    async function reverseGeocode(lat, lon){
+      // Lightweight reverse geocoding via Nominatim (no key). Best-effort only.
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if(!res.ok) return null;
+        const data = await res.json();
+        return data.display_name || data.name || null;
+      } catch { return null; }
+    }
+
+    function getLocation(){
+      const status = $('locStatus');
+      status.textContent = 'Requesting location…';
+      status.className = 'small';
+      return new Promise((resolve) => {
+        if(!navigator.geolocation){
+          status.textContent = 'Geolocation not supported.';
+          status.className = 'small err';
+          return resolve(null);
+        }
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lon = Number(pos.coords.longitude.toFixed(6));
+          $('lat').value = String(lat);
+          $('lon').value = String(lon);
+          status.textContent = `Lat ${lat}, Lon ${lon}`;
+          status.className = 'small ok';
+          // Best-effort reverse geocode without blocking submission
+          const name = await reverseGeocode(lat, lon);
+          if(name){ $('place').value = name; }
+          resolve({ lat, lon, name: name||'' });
+        }, (err) => {
+          status.textContent = err && err.message ? err.message : 'Failed to get location.';
+          status.className = 'small err';
+          resolve(null);
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
+      });
+    }
+
+    function onSubmit(e){
+      e.preventDefault();
+      const name = $('name').value.trim();
+      const mobile = $('mobile').value.trim();
+      const lat = parseFloat($('lat').value) || null;
+      const lon = parseFloat($('lon').value) || null;
+      const place = $('place').value.trim();
+      if(!name || !mobile){ alert('Please enter name and mobile.'); return; }
+      const entry = { name, mobile, lat, lon, place, ts: Date.now() };
+      const list = readEntries();
+      list.push(entry);
+      writeEntries(list);
+      $('saved').textContent = 'Saved.';
+      $('saved').className = 'small ok';
+      (e.target).reset();
+      $('lat').value=''; $('lon').value=''; $('place').value='';
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      $('locBtn').addEventListener('click', async (e)=>{
+        e.preventDefault();
+        await getLocation();
+      });
+      $('f').addEventListener('submit', onSubmit);
+    });
+  </script>
+</head>
+<body>
+  <h1>JalSaathi</h1>
+  <form id="f">
+    <label>
+      Name
+      <input id="name" name="name" required autocomplete="name" />
+    </label>
+    <label>
+      Mobile
+      <input id="mobile" name="mobile" required inputmode="tel" autocomplete="tel" />
+    </label>
+    <div class="row">
+      <label>
+        Latitude
+        <input id="lat" name="lat" readonly />
+      </label>
+      <label>
+        Longitude
+        <input id="lon" name="lon" readonly />
+      </label>
+    </div>
+    <label>
+      Place (auto if possible)
+      <input id="place" name="place" readonly />
+    </label>
+    <div class="row">
+      <button id="locBtn">Get Location</button>
+      <button type="submit">Submit</button>
+    </div>
+    <div id="locStatus" class="small hint"></div>
+    <div id="saved" class="small"></div>
+  </form>
+
+  
+</body>
+</html>
+
+
+
